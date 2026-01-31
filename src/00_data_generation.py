@@ -38,7 +38,7 @@ print(f"Generating data in {CATALOG_NAME}.{SCHEMA_NAME}...")
 # COMMAND ----------
 
 print("--- 1. Generating Products Table ---")
-df_products = spark.range(0, NUM_PRODUCTS).withColumn("product_id", 
+df_products = spark.range(0, NUM_PRODUCTS_ROWS).withColumn("product_id", 
     F.concat(F.lit("PROD_"), F.col("id").cast("string"))
 ).withColumn("product_name", F.concat(F.lit("Product Name "), F.col("id"))) \
  .withColumn("category", (F.rand() * 100).cast("int").cast("string")) \
@@ -64,12 +64,12 @@ print(f"Products Table Created: {df_products.count()} rows")
 print("--- 2. Generating Sales Table ---")
 
 # A) Normal Data (90%)
-df_normal = spark.range(0, int(NUM_SALES * 0.9)).withColumn("product_id", 
-    F.concat(F.lit("PROD_"), (1 + (F.rand() * (NUM_PRODUCTS - 1))).cast("int").cast("string"))
+df_normal = spark.range(0, int(NUM_SALES_ROWS * 0.9)).withColumn("product_id", 
+    F.concat(F.lit("PROD_"), (1 + (F.rand() * (NUM_PRODUCTS_ROWS - 1))).cast("int").cast("string"))
 )
 
 # B) Skew Data (10% - All 'PRODUCT_SKEW')
-df_skew = spark.range(0, int(NUM_SALES * 0.1)).withColumn("product_id", F.lit("PRODUCT_SKEW"))
+df_skew = spark.range(0, int(NUM_SALES_ROWS * 0.1)).withColumn("product_id", F.lit("PRODUCT_SKEW"))
 
 df_sales_base = df_normal.union(df_skew)
 
