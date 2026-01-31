@@ -18,5 +18,5 @@ TBL_PRACTICE_SALES_SKEW = "practice_sales_skew"
 TBL_PRACTICE_SALES_UNOPT = "practice_sales_unoptimized"
 
 # Constants
-NUM_SALES_ROWS = 10_000_000
+NUM_SALES_ROWS = 50_000_000
 NUM_PRODUCTS_ROWS = 10_000
