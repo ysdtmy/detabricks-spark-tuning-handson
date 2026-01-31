@@ -9,9 +9,10 @@
 
 from pyspark.sql import SparkSession
 import time
+import config
 
-CATALOG_NAME = "main"
-SCHEMA_NAME = "tuning_guide"
+CATALOG_NAME = config.CATALOG_NAME
+SCHEMA_NAME = config.SCHEMA_NAME
 
 spark = SparkSession.builder.appName("ComputeAndCache").getOrCreate()
 spark.sql(f"USE {CATALOG_NAME}.{SCHEMA_NAME}")
@@ -23,7 +24,7 @@ def measure_time(query_desc, func):
     print(f"[{query_desc}] Duration: {end - start:.4f} sec")
     return result
 
-df = spark.table("sales")
+df = spark.table(config.TBL_SALES)
 
 # COMMAND ----------
 
@@ -71,7 +72,7 @@ print("\n=== 3. Photon Engine Usage Check ===")
 
 print("Query: Sum amount by product_id")
 
-query = "SELECT product_id, sum(amount) FROM sales GROUP BY product_id"
+query = f"SELECT product_id, sum(amount) FROM {config.TBL_SALES} GROUP BY product_id"
 df_agg = spark.sql(query)
 plan = df_agg._jdf.queryExecution().executedPlan().toString()
 

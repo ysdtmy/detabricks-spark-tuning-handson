@@ -10,9 +10,10 @@
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 import time
+import config
 
-CATALOG_NAME = "main"
-SCHEMA_NAME = "tuning_guide"
+CATALOG_NAME = config.CATALOG_NAME
+SCHEMA_NAME = config.SCHEMA_NAME
 SALT_FACTOR = 10 # 10分割
 
 spark = SparkSession.builder.appName("SkewSalting").getOrCreate()
@@ -26,8 +27,8 @@ def measure_time(query_desc, func):
     return result
 
 # Skewデータ抽出
-df_sales_skew = spark.table("sales").filter(F.col("product_id") == "PRODUCT_SKEW")
-df_products_skew = spark.table("products").filter(F.col("product_id") == "PRODUCT_SKEW")
+df_sales_skew = spark.table(config.TBL_SALES).filter(F.col("product_id") == "PRODUCT_SKEW")
+df_products_skew = spark.table(config.TBL_PRODUCTS).filter(F.col("product_id") == "PRODUCT_SKEW")
 
 # COMMAND ----------
 

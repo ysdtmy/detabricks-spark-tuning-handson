@@ -11,12 +11,13 @@
 
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
+import config
 
-# 設定: Unity Catalog
-CATALOG_NAME = "main"
-SCHEMA_NAME = "tuning_guide"
-NUM_SALES = 10_000_000  # 1000万件
-NUM_PRODUCTS = 10_000   # 1万件
+# 設定: Load from config
+CATALOG_NAME = config.CATALOG_NAME
+SCHEMA_NAME = config.SCHEMA_NAME
+NUM_SALES = config.NUM_SALES_ROWS
+NUM_PRODUCTS = config.NUM_PRODUCTS_ROWS
 
 spark = SparkSession.builder.appName("DataGeneration").getOrCreate()
 
@@ -40,13 +41,14 @@ df_products = spark.range(0, NUM_PRODUCTS).withColumn("product_id",
     F.concat(F.lit("PROD_"), F.col("id").cast("string"))
 ).withColumn("product_name", F.concat(F.lit("Product Name "), F.col("id"))) \
  .withColumn("category", (F.rand() * 100).cast("int").cast("string")) \
- .withColumn("price", (F.rand() * 1000).cast("int"))
+ .withColumn("price", (F.rand() * 1000).cast("int")) \
+ .drop("id")
 
 # skew用商品を明示的に作成
 df_skew_prod = spark.createDataFrame([("PRODUCT_SKEW", "Skewed Product", "999", 500)], ["product_id", "product_name", "category", "price"])
 df_products = df_products.union(df_skew_prod)
 
-df_products.write.format("delta").mode("overwrite").saveAsTable("products")
+df_products.write.format("delta").mode("overwrite").saveAsTable(config.TBL_PRODUCTS)
 print(f"Products Table Created: {df_products.count()} rows")
 
 # COMMAND ----------
@@ -80,7 +82,7 @@ df_sales = df_sales_base \
     .withColumn("quantity", (F.rand() * 10).cast("int")) \
     .withColumn("payload", F.expr("repeat('X', 50)")) # Data size padding
 
-df_sales.write.format("delta").mode("overwrite").saveAsTable("sales")
+df_sales.write.format("delta").mode("overwrite").saveAsTable(config.TBL_SALES)
 print(f"Sales Table Created: {df_sales.count()} rows")
 
 # COMMAND ----------
@@ -93,8 +95,8 @@ print(f"Sales Table Created: {df_sales.count()} rows")
 
 print("--- 3. Generating Small Files Table ---")
 # 10万件を10万ファイルにする (Extreme Case)
-df_small = spark.table("sales").limit(100000)
-df_small.repartition(100000).write.format("delta").mode("overwrite").saveAsTable("sales_small_files")
+df_small = spark.table(config.TBL_SALES).limit(100000)
+df_small.repartition(100000).write.format("delta").mode("overwrite").saveAsTable(config.TBL_SALES_SMALL)
 print("Small Files Table Created.")
 
 print("\nAll Data Generation Completed!")

@@ -9,13 +9,17 @@
 
 from pyspark.sql import SparkSession
 import time
+import config
 
 # 設定
-CATALOG_NAME = "main"
-SCHEMA_NAME = "tuning_guide"
+CATALOG_NAME = config.CATALOG_NAME
+SCHEMA_NAME = config.SCHEMA_NAME
 
 spark = SparkSession.builder.appName("StorageOptimization").getOrCreate()
 spark.sql(f"USE {CATALOG_NAME}.{SCHEMA_NAME}")
+
+# Disable Delta Cache to ensure we measure I/O skipping, not RAM speed
+spark.conf.set("spark.databricks.io.cache.enabled", "false")
 
 def measure_time(query_desc, func):
     start = time.time()
@@ -40,7 +44,7 @@ def measure_time(query_desc, func):
 
 print("\n=== 1. Liquid Clustering vs Z-Order Verification (Sales Data) ===")
 
-df_source = spark.read.table("sales")
+df_source = spark.read.table(config.TBL_SALES)
 target_product = "PROD_50" 
 target_date_start = "2024-06-01"
 
@@ -57,9 +61,10 @@ def run_query(table_name):
 # COMMAND ----------
 
 # A) 標準 (No Optimization)
-print("\n--- A) Standard Table ---")
+print("\n--- A) Standard Table (Unoptimized) ---")
 spark.sql("DROP TABLE IF EXISTS sales_standard")
-df_source.write.format("delta").saveAsTable("sales_standard")
+# Force many small files (200 partitions) to simulate "unoptimized" state and emphasize scanning cost
+df_source.repartition(200).write.format("delta").saveAsTable("sales_standard")
 
 # COMMAND ----------
 
@@ -67,7 +72,9 @@ df_source.write.format("delta").saveAsTable("sales_standard")
 print("\n--- B) Liquid Clustering Table ---")
 spark.sql("DROP TABLE IF EXISTS sales_liquid")
 df_source.write.format("delta").option("clusteringColumns", "product_id, txn_date").saveAsTable("sales_liquid")
-spark.sql("OPTIMIZE sales_liquid")
+df_source.write.format("delta").option("clusteringColumns", "product_id, txn_date").saveAsTable("sales_liquid")
+print("Running OPTIMIZE on Liquid table...")
+measure_time("Liquid OPTIMIZE (Incremental)", lambda: spark.sql("OPTIMIZE sales_liquid").collect())
 
 # COMMAND ----------
 
@@ -75,7 +82,9 @@ spark.sql("OPTIMIZE sales_liquid")
 print("\n--- C) Z-Order Table ---")
 spark.sql("DROP TABLE IF EXISTS sales_zorder")
 df_source.write.format("delta").saveAsTable("sales_zorder")
-spark.sql("OPTIMIZE sales_zorder ZORDER BY (product_id, txn_date)")
+df_source.write.format("delta").saveAsTable("sales_zorder")
+print("Running OPTIMIZE ZORDER BY on Z-Order table...")
+measure_time("Z-Order OPTIMIZE (Heavier)", lambda: spark.sql("OPTIMIZE sales_zorder ZORDER BY (product_id, txn_date)").collect())
 
 # COMMAND ----------
 
@@ -104,13 +113,13 @@ measure_time("Z-Order: Data Skipping", lambda: run_query("sales_zorder"))
 print("\n=== 2. Compaction Verification ===")
 
 print("Checking 'sales_small_files'...")
-num_files = spark.table("sales_small_files").inputFiles()
+num_files = spark.table(config.TBL_SALES_SMALL).inputFiles()
 print(f"Files BEFORE: {len(num_files)}")
 
-measure_time("Read (Before)", lambda: spark.table("sales_small_files").count())
+measure_time("Read (Before)", lambda: spark.table(config.TBL_SALES_SMALL).count())
 
 print("Running OPTIMIZE...")
-spark.sql("OPTIMIZE sales_small_files")
+spark.sql(f"OPTIMIZE {config.TBL_SALES_SMALL}")
 
-print(f"Files AFTER : {len(spark.table('sales_small_files').inputFiles())}")
-measure_time("Read (After)", lambda: spark.table("sales_small_files").count())
+print(f"Files AFTER : {len(spark.table(config.TBL_SALES_SMALL).inputFiles())}")
+measure_time("Read (After)", lambda: spark.table(config.TBL_SALES_SMALL).count())

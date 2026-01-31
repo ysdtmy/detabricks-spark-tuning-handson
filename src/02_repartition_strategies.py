@@ -9,14 +9,15 @@
 
 from pyspark.sql import SparkSession
 import time
+import config
 
-CATALOG_NAME = "main"
-SCHEMA_NAME = "tuning_guide"
+CATALOG_NAME = config.CATALOG_NAME
+SCHEMA_NAME = config.SCHEMA_NAME
 
 spark = SparkSession.builder.appName("RepartitionStrategies").getOrCreate()
 spark.sql(f"USE {CATALOG_NAME}.{SCHEMA_NAME}")
 
-df = spark.table("sales") 
+df = spark.table(config.TBL_SALES) 
 
 def measure_time(query_desc, func):
     start = time.time()

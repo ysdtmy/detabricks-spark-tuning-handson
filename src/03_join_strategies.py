@@ -10,9 +10,10 @@
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 import time
+import config
 
-CATALOG_NAME = "main"
-SCHEMA_NAME = "tuning_guide"
+CATALOG_NAME = config.CATALOG_NAME
+SCHEMA_NAME = config.SCHEMA_NAME
 
 spark = SparkSession.builder.appName("JoinStrategies").getOrCreate()
 spark.sql(f"USE {CATALOG_NAME}.{SCHEMA_NAME}")
@@ -25,8 +26,8 @@ def measure_time(query_desc, func):
     print(f"[{query_desc}] Duration: {end - start:.4f} sec")
     return result
 
-df_sales = spark.table("sales")
-df_products = spark.table("products")
+df_sales = spark.table(config.TBL_SALES)
+df_products = spark.table(config.TBL_PRODUCTS)
 
 # COMMAND ----------
 

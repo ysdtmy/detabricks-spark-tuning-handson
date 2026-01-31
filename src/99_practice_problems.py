@@ -13,9 +13,10 @@ from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.types import DoubleType
 import time
+import config
 
-CATALOG_NAME = "main"
-SCHEMA_NAME = "tuning_guide"
+CATALOG_NAME = config.CATALOG_NAME
+SCHEMA_NAME = config.SCHEMA_NAME
 
 spark = SparkSession.builder.appName("PracticeProblems").getOrCreate()
 spark.sql(f"USE {CATALOG_NAME}.{SCHEMA_NAME}")
@@ -39,7 +40,7 @@ def measure_time(query_desc, func):
 print("\n=== Challenge 1: Daily Report Optimization ===")
 # Slow Code
 def task1_slow():
-    return spark.sql("SELECT sum(amount) FROM practice_sales_unoptimized WHERE txn_date = '2024-01-01'").collect()
+    return spark.sql(f"SELECT sum(amount) FROM {config.TBL_PRACTICE_SALES_UNOPT} WHERE txn_date = '2024-01-01'").collect()
 
 measure_time("Slow Query", task1_slow)
 
@@ -57,8 +58,8 @@ def task1_solution():
 
 print("\n=== Challenge 2: Skew Join Fixing ===")
 
-df_sales_skew = spark.table("practice_sales_skew").filter(F.col("product_id") == "P_0")
-df_products = spark.table("practice_products").filter(F.col("product_id") == "P_0")
+df_sales_skew = spark.table(config.TBL_PRACTICE_SALES_SKEW).filter(F.col("product_id") == "P_0")
+df_products = spark.table(config.TBL_PRACTICE_PRODUCTS).filter(F.col("product_id") == "P_0")
 spark.conf.set("spark.sql.adaptive.skewJoin.enabled", "false") # Restriction
 
 def task2_slow():
@@ -81,7 +82,7 @@ def task2_solution():
 
 print("\n=== Challenge 3: Remove Python UDF ===")
 
-df_sales = spark.table("practice_sales_unoptimized").select("amount")
+df_sales = spark.table(config.TBL_PRACTICE_SALES_UNOPT).select("amount")
 @F.udf("double")
 def tax_calc_slow(amount):
     return amount * 1.1
@@ -104,7 +105,7 @@ def task3_solution():
 # COMMAND ----------
 
 print("\n=== Challenge 4: Excessive Shuffle ===")
-df_sales = spark.table("practice_sales_unoptimized")
+df_sales = spark.table(config.TBL_PRACTICE_SALES_UNOPT)
 
 def task4_slow():
     return df_sales.repartition(10).count()
@@ -125,8 +126,8 @@ def task4_solution():
 # COMMAND ----------
 
 print("\n=== Challenge 5: Inefficient Join Strategy ===")
-df_sales = spark.table("practice_sales_unoptimized")
-df_prod = spark.table("practice_products")
+df_sales = spark.table(config.TBL_PRACTICE_SALES_UNOPT)
+df_prod = spark.table(config.TBL_PRACTICE_PRODUCTS)
 spark.conf.set("spark.sql.autoBroadcastJoinThreshold", -1)
 
 def task5_slow():
@@ -150,7 +151,7 @@ def task5_solution():
 print("\n=== Challenge 6: Wasteful Re-computation ===")
 
 def task6_slow():
-    df_heavy = spark.table("practice_sales_unoptimized").filter("amount > 5000")
+    df_heavy = spark.table(config.TBL_PRACTICE_SALES_UNOPT).filter("amount > 5000")
     c = df_heavy.count()
     r = df_heavy.limit(5).collect()
     return c, r

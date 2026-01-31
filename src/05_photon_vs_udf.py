@@ -12,9 +12,10 @@ from pyspark.sql import functions as F
 from pyspark.sql.types import DoubleType
 import pandas as pd
 import time
+import config
 
-CATALOG_NAME = "main"
-SCHEMA_NAME = "tuning_guide"
+CATALOG_NAME = config.CATALOG_NAME
+SCHEMA_NAME = config.SCHEMA_NAME
 
 spark = SparkSession.builder.appName("PhotonVsUDF").getOrCreate()
 spark.sql(f"USE {CATALOG_NAME}.{SCHEMA_NAME}")
@@ -26,7 +27,7 @@ def measure_time(query_desc, func):
     print(f"[{query_desc}] Duration: {end - start:.4f} sec")
     return result
 
-df = spark.table("sales").select("txn_id", "amount")
+df = spark.table(config.TBL_SALES).select("txn_id", "amount")
 
 # COMMAND ----------
 
