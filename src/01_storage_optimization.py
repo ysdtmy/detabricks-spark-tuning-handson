@@ -74,7 +74,7 @@ df_source.repartition(200).write.format("delta").saveAsTable("sales_standard")
 print("\n--- B) Liquid Clustering Table ---")
 spark.sql("DROP TABLE IF EXISTS sales_liquid")
 df_source.write.format("delta").option("clusteringColumns", "product_id, txn_date").saveAsTable("sales_liquid")
-df_source.write.format("delta").option("clusteringColumns", "product_id, txn_date").saveAsTable("sales_liquid")
+
 print("Running OPTIMIZE on Liquid table...")
 measure_time("Liquid OPTIMIZE (Incremental)", lambda: spark.sql("OPTIMIZE sales_liquid").collect())
 
@@ -84,7 +84,7 @@ measure_time("Liquid OPTIMIZE (Incremental)", lambda: spark.sql("OPTIMIZE sales_
 print("\n--- C) Z-Order Table ---")
 spark.sql("DROP TABLE IF EXISTS sales_zorder")
 df_source.write.format("delta").saveAsTable("sales_zorder")
-df_source.write.format("delta").saveAsTable("sales_zorder")
+
 print("Running OPTIMIZE ZORDER BY on Z-Order table...")
 measure_time("Z-Order OPTIMIZE (Heavier)", lambda: spark.sql("OPTIMIZE sales_zorder ZORDER BY (product_id, txn_date)").collect())
 
