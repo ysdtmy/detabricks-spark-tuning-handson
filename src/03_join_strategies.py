@@ -7,13 +7,15 @@
 
 # COMMAND ----------
 
+# MAGIC %run ./config
+
+# COMMAND ----------
+
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 import time
-import config
 
-CATALOG_NAME = config.CATALOG_NAME
-SCHEMA_NAME = config.SCHEMA_NAME
+# CATALOG_NAME, SCHEMA_NAME from config
 
 spark = SparkSession.builder.appName("JoinStrategies").getOrCreate()
 spark.sql(f"USE {CATALOG_NAME}.{SCHEMA_NAME}")
@@ -26,8 +28,8 @@ def measure_time(query_desc, func):
     print(f"[{query_desc}] Duration: {end - start:.4f} sec")
     return result
 
-df_sales = spark.table(config.TBL_SALES)
-df_products = spark.table(config.TBL_PRODUCTS)
+df_sales = spark.table(TBL_SALES)
+df_products = spark.table(TBL_PRODUCTS)
 
 # COMMAND ----------
 

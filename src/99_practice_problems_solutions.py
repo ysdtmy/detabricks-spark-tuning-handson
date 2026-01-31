@@ -4,11 +4,12 @@
 # MAGIC
 # MAGIC 練習問題(Dojo)の模範解答集です。
 
+# MAGIC %run ./config
+
 # COMMAND ----------
 
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
-import config
 
 # COMMAND ----------
 
@@ -20,7 +21,7 @@ import config
 # COMMAND ----------
 
 def task1_solution(spark):
-    spark.table(config.TBL_PRACTICE_SALES_UNOPT).write.format("delta") \
+    spark.table(TBL_PRACTICE_SALES_UNOPT).write.format("delta") \
         .option("clusteringColumns", "txn_date").mode("overwrite").saveAsTable("practice_sales_liquid")
     
     return spark.sql("SELECT sum(amount) FROM practice_sales_liquid WHERE txn_date = '2024-01-01'").collect()
@@ -79,7 +80,7 @@ def task5_solution(df_sales, df_products):
 # COMMAND ----------
 
 def task6_solution(spark):
-    df_heavy = spark.table(config.TBL_PRACTICE_SALES_UNOPT).filter("amount > 5000")
+    df_heavy = spark.table(TBL_PRACTICE_SALES_UNOPT).filter("amount > 5000")
     df_heavy.cache()
     
     c = df_heavy.count()

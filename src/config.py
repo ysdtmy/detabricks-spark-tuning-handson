@@ -1,11 +1,11 @@
-
+# Databricks notebook source
 # -------------------------------------------------------------------------
 # Common Configuration for Spark Tuning Guide
 # -------------------------------------------------------------------------
 
 # Catalog & Schema
 CATALOG_NAME = "spark_tuning_handson"
-SCHEMA_NAME = "main"
+SCHEMA_NAME = "default"
 
 # Main Verification Tables
 TBL_PRODUCTS = "products"

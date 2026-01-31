@@ -7,17 +7,19 @@
 
 # COMMAND ----------
 
+# MAGIC %run ./config
+
+# COMMAND ----------
+
 from pyspark.sql import SparkSession
 import time
-import config
 
-CATALOG_NAME = config.CATALOG_NAME
-SCHEMA_NAME = config.SCHEMA_NAME
+# CATALOG_NAME, SCHEMA_NAME from config
 
 spark = SparkSession.builder.appName("RepartitionStrategies").getOrCreate()
 spark.sql(f"USE {CATALOG_NAME}.{SCHEMA_NAME}")
 
-df = spark.table(config.TBL_SALES) 
+df = spark.table(TBL_SALES) 
 
 def measure_time(query_desc, func):
     start = time.time()

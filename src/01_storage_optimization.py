@@ -7,13 +7,15 @@
 
 # COMMAND ----------
 
+# MAGIC %run ./config
+
+# COMMAND ----------
+
 from pyspark.sql import SparkSession
 import time
-import config
 
 # 設定
-CATALOG_NAME = config.CATALOG_NAME
-SCHEMA_NAME = config.SCHEMA_NAME
+# CATALOG_NAME, SCHEMA_NAME form config
 
 spark = SparkSession.builder.appName("StorageOptimization").getOrCreate()
 spark.sql(f"USE {CATALOG_NAME}.{SCHEMA_NAME}")
@@ -44,7 +46,7 @@ def measure_time(query_desc, func):
 
 print("\n=== 1. Liquid Clustering vs Z-Order Verification (Sales Data) ===")
 
-df_source = spark.read.table(config.TBL_SALES)
+df_source = spark.read.table(TBL_SALES)
 target_product = "PROD_50" 
 target_date_start = "2024-06-01"
 
@@ -113,13 +115,13 @@ measure_time("Z-Order: Data Skipping", lambda: run_query("sales_zorder"))
 print("\n=== 2. Compaction Verification ===")
 
 print("Checking 'sales_small_files'...")
-num_files = spark.table(config.TBL_SALES_SMALL).inputFiles()
+num_files = spark.table(TBL_SALES_SMALL).inputFiles()
 print(f"Files BEFORE: {len(num_files)}")
 
-measure_time("Read (Before)", lambda: spark.table(config.TBL_SALES_SMALL).count())
+measure_time("Read (Before)", lambda: spark.table(TBL_SALES_SMALL).count())
 
 print("Running OPTIMIZE...")
-spark.sql(f"OPTIMIZE {config.TBL_SALES_SMALL}")
+spark.sql(f"OPTIMIZE {TBL_SALES_SMALL}")
 
-print(f"Files AFTER : {len(spark.table(config.TBL_SALES_SMALL).inputFiles())}")
-measure_time("Read (After)", lambda: spark.table(config.TBL_SALES_SMALL).count())
+print(f"Files AFTER : {len(spark.table(TBL_SALES_SMALL).inputFiles())}")
+measure_time("Read (After)", lambda: spark.table(TBL_SALES_SMALL).count())
