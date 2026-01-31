@@ -1,10 +1,11 @@
-# Databricks Tuning Guide: 04_Compute_and_Cache
-#
-# ==============================================================================
-# 解説: Compute & Cache (Sales Data)
-# ==============================================================================
-# ... (背景説明は既存と同じ) ...
-# ==============================================================================
+# Databricks notebook source
+# MAGIC %md
+# MAGIC # 04_Compute_and_Cache
+# MAGIC
+# MAGIC * **Topic**: Spark Cache vs Disk Cache & Photon Engine.
+# MAGIC * **Goal**: Optimize repeated access and verify Photon usage.
+
+# COMMAND ----------
 
 from pyspark.sql import SparkSession
 import time
@@ -24,14 +25,19 @@ def measure_time(query_desc, func):
 
 df = spark.table("sales")
 
-# ---------------------------------------------------------
-# 1. Spark Cache Verification
-# ---------------------------------------------------------
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## 1. Spark Cache Verification
+# MAGIC
+# MAGIC **【Spark UI Check】**
+# MAGIC * **Storage** Tab.
+# MAGIC * **Fraction Cached**: Should be 100%.
+# MAGIC * **Size in Memory**: Check if it fits in RAM or spills to disk.
+
+# COMMAND ----------
+
 print("\n=== 1. Spark Cache Verification ===")
-print("【Spark UI チェックポイント】")
-print("1. 'Storage' タブを見る")
-print("   - 'Fraction Cached' が 100% になっているか")
-print("   - 'Size in Memory' (JVM Heap) vs 'Size on Disk' (Spill Check)")
 
 # 特定条件の売上データを作成
 df_subset = df.filter("amount > 100").select("txn_id", "amount")
@@ -50,27 +56,18 @@ measure_time("Cached Hit Run", lambda: df_subset.count())
 
 df_subset.unpersist()
 
+# COMMAND ----------
 
-# ---------------------------------------------------------
-# 2. Disk Cache (Explanation)
-# ---------------------------------------------------------
-print("\n=== 2. Disk Cache Information ===")
-print("【Spark UI チェックポイント】")
-print("1. 'Storage' タブ > 'Disk Used' カラムを見る")
-print("2. または Ganglia > 'Disk Usage' でWorkerのディスク使用率上昇を確認する")
+# MAGIC %md
+# MAGIC ## 2. Photon Engine Usage Check
+# MAGIC
+# MAGIC **【Spark UI Check】**
+# MAGIC * **SQL** Tab > **Graph**.
+# MAGIC * Look for nodes starting with **Photon** (e.g., `PhotonProject`, `PhotonGroupAgg`).
 
-print("Disk Cache is automatic on supported workers (e.g., L4ds, E4ds types).")
+# COMMAND ----------
 
-
-# ---------------------------------------------------------
-# 3. Photon Engine Usage Check
-# ---------------------------------------------------------
 print("\n=== 3. Photon Engine Usage Check ===")
-print("【Spark UI チェックポイント】")
-print("1. SQLタブ > 実行計画(Graph)を見る")
-print("2. ノード名に 'Photon' が付いているか確認 (例: PhotonProject, PhotonGroupAgg)")
-print("   - 付いていればC++ネイティブ実行されている")
-print("   - 付いていなければJVM実行されている (非対応の型や関数がある場合など)")
 
 print("Query: Sum amount by product_id")
 
@@ -85,5 +82,3 @@ if "Photon" in plan:
         print(f" - {op}")
 else:
     print("\n⚠️ Photon is NOT found.")
-
-spark.stop()

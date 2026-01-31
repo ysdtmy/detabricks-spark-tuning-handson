@@ -1,102 +1,100 @@
-# Databricks Tuning Guide: 00_Data_Generation (Retail Scenario)
-#
-# ==============================================================================
-# 解説: 業務データ(小売)を模した検証データの生成
-# ==============================================================================
-# これまでのチューニング検証を、より実践的な「売上 (Sales)」と「商品 (Products)」
-# のデータモデルで行います。
-#
-# 作成されるテーブル (Catalog: main, Schema: tuning_guide):
-# 1. products (商品マスタ) - Dimension Table
-#    - 約 10,000 商品
-#    - columns: product_id, product_name, category, price
-#
-# 2. sales (売上トランザクション) - Fact Table
-#    - 約 10,000,000 レコード
-#    - columns: txn_id, txn_date, customer_id, product_id, quantity, amount
-#    - **Skew**: 特定のヒット商品 ('PRODUCT_SKEW') に注文が集中するよう生成します。
-#      (Skew Joinの検証用)
-#
-# 3. sales_small_files (小ファイル用)
-#    - 小ファイル問題を再現するために細切れに保存された売上データ
-#
-# ==============================================================================
+# Databricks notebook source
+# MAGIC %md
+# MAGIC # 00_Data_Generation
+# MAGIC
+# MAGIC 検証用データの作成 (Retail Scenario)
+# MAGIC * Sales Table: 10M rows
+# MAGIC * Products Table: 10k rows
+# MAGIC * Includes: Skewed Data & Small Files
+
+# COMMAND ----------
 
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
-import random
 
-# 設定
+# 設定: Unity Catalog
 CATALOG_NAME = "main"
 SCHEMA_NAME = "tuning_guide"
-NUM_PRODUCTS = 10_000
-NUM_SALES = 10_000_000
+NUM_SALES = 10_000_000  # 1000万件
+NUM_PRODUCTS = 10_000   # 1万件
 
-spark = SparkSession.builder.appName("DataGeneration_Retail").getOrCreate()
+spark = SparkSession.builder.appName("DataGeneration").getOrCreate()
 
-# Schema Setup
-print(f"Setting up database: {CATALOG_NAME}.{SCHEMA_NAME}...")
+# Schema作成
 spark.sql(f"CREATE SCHEMA IF NOT EXISTS {CATALOG_NAME}.{SCHEMA_NAME}")
 spark.sql(f"USE {CATALOG_NAME}.{SCHEMA_NAME}")
 
-# ---------------------------------------------------------
-# 1. Products (商品マスタ) 生成
-# ---------------------------------------------------------
-print("\n--- Generating 'products' (Dimension Table) ---")
+print(f"Generating data in {CATALOG_NAME}.{SCHEMA_NAME}...")
 
-# ランダムな商品カテゴリ
-categories = ["Electronics", "Clothing", "Home", "Books", "Beauty"]
+# COMMAND ----------
 
-# DataFrame作成
-# id: 0 ~ 9999
-# Skew検証用に 'PRODUCT_SKEW' というIDを一つ混ぜます (ID: 0 をマッピング)
+# MAGIC %md
+# MAGIC ## 1. Products Table (Dimension)
+# MAGIC * Small table (Broadcast candidate)
+# MAGIC * Contains `PRODUCT_SKEW` for Skew Join testing.
+
+# COMMAND ----------
+
+print("--- 1. Generating Products Table ---")
 df_products = spark.range(0, NUM_PRODUCTS).withColumn("product_id", 
-    F.when(F.col("id") == 0, F.lit("PRODUCT_SKEW"))
-     .otherwise(F.concat(F.lit("PROD_"), F.col("id").cast("string")))
+    F.concat(F.lit("PROD_"), F.col("id").cast("string"))
 ).withColumn("product_name", F.concat(F.lit("Product Name "), F.col("id"))) \
- .withColumn("category", F.lit(categories)[(F.rand() * len(categories)).cast("int")]) \
- .withColumn("price", (F.rand() * 10000).cast("int")) \
- .drop("id")
+ .withColumn("category", (F.rand() * 100).cast("int").cast("string")) \
+ .withColumn("price", (F.rand() * 1000).cast("int"))
+
+# skew用商品を明示的に作成
+df_skew_prod = spark.createDataFrame([("PRODUCT_SKEW", "Skewed Product", "999", 500)], ["product_id", "product_name", "category", "price"])
+df_products = df_products.union(df_skew_prod)
 
 df_products.write.format("delta").mode("overwrite").saveAsTable("products")
-print(f"✅ Saved 'products' ({NUM_PRODUCTS} rows).")
+print(f"Products Table Created: {df_products.count()} rows")
 
+# COMMAND ----------
 
-# ---------------------------------------------------------
-# 2. Sales (売上) 生成 - Skewあり
-# ---------------------------------------------------------
-print("\n--- Generating 'sales' (Fact Table) with Skew ---")
+# MAGIC %md
+# MAGIC ## 2. Sales Table (Fact)
+# MAGIC * Large table (10M rows)
+# MAGIC * Heavily skewed towards `PRODUCT_SKEW` (for AQE Skew Join verification).
 
-# 90% の売上は 'PRODUCT_SKEW' (爆売れ商品)
-df_skew_sales = spark.range(0, int(NUM_SALES * 0.9)) \
-    .withColumn("product_id", F.lit("PRODUCT_SKEW"))
+# COMMAND ----------
 
-# 10% の売上は ランダムな商品 (PROD_1 ~ PROD_9999)
-# ※ PROD_0 は SKEW なので除外したいが、簡易的に 1~9999 を生成
-df_normal_sales = spark.range(0, int(NUM_SALES * 0.1)) \
-    .withColumn("product_id", F.concat(F.lit("PROD_"), (1 + (F.rand() * (NUM_PRODUCTS - 1))).cast("int").cast("string")))
+print("--- 2. Generating Sales Table ---")
 
-# 合体して共通カラム付与
-df_sales = df_skew_sales.union(df_normal_sales) \
+# A) Normal Data (90%)
+df_normal = spark.range(0, int(NUM_SALES * 0.9)).withColumn("product_id", 
+    F.concat(F.lit("PROD_"), (1 + (F.rand() * (NUM_PRODUCTS - 1))).cast("int").cast("string"))
+)
+
+# B) Skew Data (10% - All 'PRODUCT_SKEW')
+df_skew = spark.range(0, int(NUM_SALES * 0.1)).withColumn("product_id", F.lit("PRODUCT_SKEW"))
+
+df_sales_base = df_normal.union(df_skew)
+
+# Add other columns
+# Payload to simulate realistic data size
+df_sales = df_sales_base \
     .withColumn("txn_id", F.expr("uuid()")) \
-    .withColumn("txn_date", F.date_add(F.lit("2024-01-01"), (F.rand() * 365).cast("int"))) \
     .withColumn("customer_id", (F.rand() * 100000).cast("int")) \
-    .withColumn("quantity", (F.rand() * 10).cast("int") + 1) \
-    .withColumn("amount", F.rand() * 50000) \
-    .withColumn("payload", F.expr("repeat('LogData', 50)")) # データ容量稼ぎ
+    .withColumn("txn_date", F.date_add(F.lit("2024-01-01"), (F.rand() * 365).cast("int"))) \
+    .withColumn("amount", (F.rand() * 10000).cast("int")) \
+    .withColumn("quantity", (F.rand() * 10).cast("int")) \
+    .withColumn("payload", F.expr("repeat('X', 50)")) # Data size padding
 
-# 保存
 df_sales.write.format("delta").mode("overwrite").saveAsTable("sales")
-print(f"✅ Saved 'sales' ({NUM_SALES} rows). Contains Skew on 'PRODUCT_SKEW'.")
+print(f"Sales Table Created: {df_sales.count()} rows")
 
+# COMMAND ----------
 
-# ---------------------------------------------------------
-# 3. Sales Small Files (小ファイル問題用)
-# ---------------------------------------------------------
-print("\n--- Generating 'sales_small_files' ---")
-# 10万件を1000ファイルに分割 (1ファイル100件)
-spark.table("sales").sample(0.01).repartition(1000) \
-    .write.format("delta").mode("overwrite").saveAsTable("sales_small_files")
-print("✅ Saved 'sales_small_files'.")
+# MAGIC %md
+# MAGIC ## 3. Small Files Table
+# MAGIC * Simulates "Small File Problem" by repartitioning to 1 record per file.
 
-print("\nAll retail data generation completed.")
+# COMMAND ----------
+
+print("--- 3. Generating Small Files Table ---")
+# 10万件を10万ファイルにする (Extreme Case)
+df_small = spark.table("sales").limit(100000)
+df_small.repartition(100000).write.format("delta").mode("overwrite").saveAsTable("sales_small_files")
+print("Small Files Table Created.")
+
+print("\nAll Data Generation Completed!")

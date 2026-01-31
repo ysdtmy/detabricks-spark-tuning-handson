@@ -1,10 +1,11 @@
-# Databricks Tuning Guide: 02_Repartition_Strategies
-#
-# ==============================================================================
-# 解説: Repartition / Coalesce / AQE Coalescing (Retail Data)
-# ==============================================================================
-# ... (背景説明は既存と同じ) ...
-# ==============================================================================
+# Databricks notebook source
+# MAGIC %md
+# MAGIC # 02_Repartition_Strategies
+# MAGIC
+# MAGIC * **Topic**: Repartition vs Coalesce & AQE Partition Coalescing.
+# MAGIC * **Goal**: Understand Shuffle cost and automatic optimization.
+
+# COMMAND ----------
 
 from pyspark.sql import SparkSession
 import time
@@ -15,7 +16,6 @@ SCHEMA_NAME = "tuning_guide"
 spark = SparkSession.builder.appName("RepartitionStrategies").getOrCreate()
 spark.sql(f"USE {CATALOG_NAME}.{SCHEMA_NAME}")
 
-# データ準備
 df = spark.table("sales") 
 
 def measure_time(query_desc, func):
@@ -25,17 +25,21 @@ def measure_time(query_desc, func):
     print(f"[{query_desc}] Duration: {end - start:.4f} sec")
     return result
 
-# ---------------------------------------------------------
-# 1. Repartition vs Coalesce
-# ---------------------------------------------------------
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## 1. Repartition vs Coalesce
+# MAGIC
+# MAGIC **【Spark UI Check】**
+# MAGIC 1. **SQL** Tab > **DAG**
+# MAGIC    * **Repartition**: Look for **Exchange** node (Shuffle).
+# MAGIC    * **Coalesce**: No Exchange node (No shuffle).
+# MAGIC 2. **Stages** Tab
+# MAGIC    * **Shuffle Write**: Large for Repartition, 0B for Coalesce.
+
+# COMMAND ----------
+
 print("\n=== 1. Basic: Repartition vs Coalesce ===")
-print("【Spark UI チェックポイント】")
-print("1. SQLタブ > DAG を見る")
-print("   - Repartition: 'Exchange' ノードがあるはず (Shuffle発生)")
-print("   - Coalesce: 'Exchange' がないはず")
-print("2. Stagesタブ > Shuffle Read / Write")
-print("   - Repartition: 数百MB〜GB単位の書き込みがある")
-print("   - Coalesce: 0 B")
 
 # Repartition (Shuffle)
 print("\n--- Repartition(200) ---")
@@ -47,16 +51,20 @@ print("\n--- Coalesce(10) ---")
 print("Merges partitions locally. Very fast.")
 measure_time("Coalesce", lambda: df.coalesce(10).count())
 
+# COMMAND ----------
 
-# ---------------------------------------------------------
-# 2. AQE Partition Coalescing
-# ---------------------------------------------------------
+# MAGIC %md
+# MAGIC ## 2. AQE Partition Coalescing
+# MAGIC
+# MAGIC Scenario: Spark config says `spark.sql.shuffle.partitions = 2000` (Too many!).
+# MAGIC Does AQE reduce it automatically?
+# MAGIC
+# MAGIC **【Spark UI Check】**
+# MAGIC * Check **AQE Split / Coalesce** details in SQL tab details.
+
+# COMMAND ----------
+
 print("\n=== 2. AQE Partition Coalescing Verification ===")
-print("【Spark UI チェックポイント】")
-print("1. SQLタブ > AQEの詳細 (DBRバージョンにより見え方が違うが、'AQE Split / Coalesce' のような表示)")
-print("2. または print出力された 'getNumPartitions' の結果を見る")
-
-print("Scenario: Grouping Sales by Product ID (Shuffle required).")
 
 # AQE On
 spark.conf.set("spark.sql.adaptive.enabled", "true")
@@ -67,7 +75,7 @@ spark.conf.set("spark.sql.shuffle.partitions", 2000)
 
 print("Running Aggregation (Group by product_id)...")
 df_agg = df.groupBy("product_id").count()
-df_agg.collect()
+df_agg.collect() # Trigger Action
 
 final_partitions = df_agg.rdd.getNumPartitions()
 print(f"\nConfigured Partitions: 2000")
@@ -77,5 +85,3 @@ if final_partitions < 2000:
     print("✅ AQE optimized the partition count!")
 else:
     print("⚠️ AQE did not reduce partitions.")
-
-spark.stop()

@@ -1,10 +1,11 @@
-# Databricks Tuning Guide: 03_Join_Strategies
-#
-# ==============================================================================
-# 解説: Join Strategies (Sales x Products)
-# ==============================================================================
-# ... (背景説明は既存と同じ) ...
-# ==============================================================================
+# Databricks notebook source
+# MAGIC %md
+# MAGIC # 03_Join_Strategies
+# MAGIC
+# MAGIC * **Topic**: Broadcast, SortMerge, ShuffleHash & Skew Joins.
+# MAGIC * **Goal**: Choose best join strategy and handle skew.
+
+# COMMAND ----------
 
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
@@ -27,13 +28,19 @@ def measure_time(query_desc, func):
 df_sales = spark.table("sales")
 df_products = spark.table("products")
 
-# ---------------------------------------------------------
-# 1. Broadcast Hash Join (BHJ)
-# ---------------------------------------------------------
-print("\n=== 1. Broadcast Hash Join (Recommended for Master Tables) ===")
-print("【Spark UI チェックポイント】")
-print("SQLタブ > DAGで 'BroadcastHashJoin' ノードを確認する。")
-print("'Exchange' も 'Sort' も無い場合、これが最速。")
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## 1. Broadcast Hash Join (BHJ)
+# MAGIC Recommended for **Big Table x Small Table**.
+# MAGIC
+# MAGIC **【Spark UI Check】**
+# MAGIC * Look for **BroadcastHashJoin** node in DAG.
+# MAGIC * Confirm NO **Exchange** (Shuffle) on the sales table side.
+
+# COMMAND ----------
+
+print("\n=== 1. Broadcast Hash Join ===")
 
 spark.conf.set("spark.sql.autoBroadcastJoinThreshold", 10485760) # 10MB
 
@@ -42,14 +49,19 @@ def run_bhj():
 
 measure_time("Broadcast Hash Join", run_bhj)
 
+# COMMAND ----------
 
-# ---------------------------------------------------------
-# 2. Sort Merge Join vs Shuffle Hash Join
-# ---------------------------------------------------------
+# MAGIC %md
+# MAGIC ## 2. Sort Merge (SMJ) vs Shuffle Hash (SHJ)
+# MAGIC Comparison for **Big Table x Big Table**.
+# MAGIC
+# MAGIC **【Spark UI Check】**
+# MAGIC * **SMJ**: **Sort** nodes -> **SortMergeJoin** node.
+# MAGIC * **SHJ**: **ShuffledHashJoin** node (No Sort). Preferred by Photon.
+
+# COMMAND ----------
+
 print("\n=== 2. Sort Merge (SMJ) vs Shuffle Hash (SHJ) ===")
-print("【Spark UI チェックポイント】")
-print("A) Sort Merge: 'SortMergeJoin' ノードの手前に 'Sort' ノードが2つある")
-print("B) Shuffle Hash: 'ShuffledHashJoin' ノードがある (Sortはない)")
 
 spark.conf.set("spark.sql.autoBroadcastJoinThreshold", -1) # Disable Broadcast
 
@@ -63,15 +75,19 @@ spark.conf.set("spark.sql.join.preferSortMergeJoin", "false")
 print("\n--- B) Shuffle Hash Join (Photon Friendly) ---")
 measure_time("Shuffle Hash Join", lambda: df_sales.join(df_products.hint("shuffle_hash"), "product_id").count())
 
+# COMMAND ----------
 
-# ---------------------------------------------------------
-# 3. Skew Join Handling
-# ---------------------------------------------------------
+# MAGIC %md
+# MAGIC ## 3. Skew Join Handling
+# MAGIC
+# MAGIC **【Spark UI Check】**
+# MAGIC * **Stages** tab -> **Event Timeline**.
+# MAGIC * Skew: One long task bar.
+# MAGIC * Optimzied: Multiple shorter bars for that partition.
+
+# COMMAND ----------
+
 print("\n=== 3. Skew Join Verification ===")
-print("【Spark UI チェックポイント】")
-print("1. Stagesタブ > 'Event Timeline' を見る。1つのタスクだけ極端に長いバーになっていたらSkew。")
-print("2. AQEが効くと、SQLタブ詳細に 'number of skewed partitions' などのメトリクスが出る。")
-print("   または DAG上で小さいSplitタスクに分割されている。")
 
 # 'PRODUCT_SKEW' に売上が集中
 df_skew_sales = df_sales.filter(F.col("product_id") == "PRODUCT_SKEW")
@@ -82,5 +98,3 @@ spark.conf.set("spark.sql.adaptive.advisoryPartitionSizeInBytes", "64MB")
 
 print("Running Skew Join (Sales skew on 'PRODUCT_SKEW')...")
 measure_time("Skew Join (AQE)", lambda: df_skew_sales.join(df_skew_dim, "product_id").count())
-
-spark.stop()

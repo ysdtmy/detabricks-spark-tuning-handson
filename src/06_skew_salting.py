@@ -1,10 +1,11 @@
-# Databricks Tuning Guide: 06_Skew_Salting
-#
-# ==============================================================================
-# 解説: Manual Salting (Retail Skew)
-# ==============================================================================
-# ... (背景説明は既存と同じ) ...
-# ==============================================================================
+# Databricks notebook source
+# MAGIC %md
+# MAGIC # 06_Skew_Salting
+# MAGIC
+# MAGIC * **Topic**: Manual Salting for Skew Joins.
+# MAGIC * **Goal**: Handle extreme skew when AQE is insufficient or unavailable.
+
+# COMMAND ----------
 
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
@@ -28,16 +29,19 @@ def measure_time(query_desc, func):
 df_sales_skew = spark.table("sales").filter(F.col("product_id") == "PRODUCT_SKEW")
 df_products_skew = spark.table("products").filter(F.col("product_id") == "PRODUCT_SKEW")
 
-# ---------------------------------------------------------
-# Manual Salting Implementation
-# ---------------------------------------------------------
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Manual Salting Implementation
+# MAGIC
+# MAGIC **【Spark UI Check】**
+# MAGIC * **Stages** Tab > **Task Duration Histogram**.
+# MAGIC * **Without Salting**: Max duration >>> Median duration (One long task).
+# MAGIC * **With Salting**: Max duration is closer to Median (Load balanced).
+
+# COMMAND ----------
+
 print("\n=== Manual Salting Comparison (Sales x Products) ===")
-print("【Spark UI チェックポイント】")
-print("1. Stagesタブ > 対象ステージの詳細を開く")
-print("2. 'Task Execution Time' のヒストグラム(分布)を見る")
-print("   - Median(中央値) と Max(最大値) の乖離を確認する。")
-print("   - Saltingなし (AQE OFF): Max だけ極端に長いバーが出る (Straggler)")
-print("   - Saltingあり: Max が下がり、全体が均される")
 
 def run_salted_join():
     # 1. Fact側: Salt付与 (0~9)
@@ -61,4 +65,3 @@ measure_time("Salted Join", run_salted_join)
 
 # 戻す
 spark.conf.set("spark.sql.adaptive.skewJoin.enabled", "true")
-spark.stop()

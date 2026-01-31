@@ -1,17 +1,13 @@
-# Databricks Tuning Guide: 99_Practice_Data_Generation
-#
-# ==============================================================================
-# 解説: 実践練習問題(Dojo)用のデータ生成
-# ==============================================================================
-# 練習問題で使うテーブルは、メインのガイド用テーブル(sales, products)とは
-# 分離して作成します。
-#
-# 作成テーブル:
-# 1. practice_products (Dim)
-# 2. practice_sales_skew (Fact, Skewed)
-# 3. practice_sales_unoptimized (Fact, No Optimization)
-#
-# ==============================================================================
+# Databricks notebook source
+# MAGIC %md
+# MAGIC # 99_Practice_Data_Generation (Dojo Setup)
+# MAGIC
+# MAGIC 練習問題(Dojo)用の軽量データを生成します。
+# MAGIC * `practice_products`
+# MAGIC * `practice_sales_skew`
+# MAGIC * `practice_sales_unoptimized`
+
+# COMMAND ----------
 
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
@@ -19,16 +15,16 @@ from pyspark.sql import functions as F
 CATALOG_NAME = "main"
 SCHEMA_NAME = "tuning_guide"
 NUM_PRODUCTS = 5_000
-NUM_SALES = 5_000_000 # 練習用に少し軽量化 (500万件)
+NUM_SALES = 5_000_000 # 500万件
 
 spark = SparkSession.builder.appName("PracticeDataGen").getOrCreate()
 spark.sql(f"USE {CATALOG_NAME}.{SCHEMA_NAME}")
 
 print("Generating Practice Data...")
 
-# ---------------------------------------------------------
+# COMMAND ----------
+
 # 1. Practice Products
-# ---------------------------------------------------------
 print("--- 1. practice_products ---")
 df_products = spark.range(0, NUM_PRODUCTS).withColumn("product_id", 
     F.concat(F.lit("P_"), F.col("id").cast("string"))
@@ -37,10 +33,9 @@ df_products = spark.range(0, NUM_PRODUCTS).withColumn("product_id",
 
 df_products.write.format("delta").mode("overwrite").saveAsTable("practice_products")
 
+# COMMAND ----------
 
-# ---------------------------------------------------------
 # 2. Practice Sales (Skew & Unoptimized)
-# ---------------------------------------------------------
 print("--- 2. practice_sales (Skewed & Unoptimized) ---")
 
 # Skew: ID 'P_0' is 90% of data
@@ -55,10 +50,10 @@ df_all = df_skew.union(df_normal) \
     .withColumn("amount", (F.rand() * 10000).cast("int")) \
     .withColumn("quantity", (F.rand() * 10).cast("int"))
 
-# Save as 'practice_sales_skew' (For Skew Join Challenge)
+# For Skew Join
 df_all.write.format("delta").mode("overwrite").saveAsTable("practice_sales_skew")
 
-# Save as 'practice_sales_unoptimized' (For Storage Challenge, no Clustering)
+# For Storage Challenge (No Optimization)
 df_all.write.format("delta").mode("overwrite").saveAsTable("practice_sales_unoptimized")
 
 print("✅ Practice Data Generation Completed.")
